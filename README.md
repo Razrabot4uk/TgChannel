@@ -4,11 +4,10 @@
 
 ## Настройка
 1. Создайте бота через BotFather и получите токен.
-2. Узнайте свой chat_id (можно через @userinfobot или любой другой способ).
-3. Установите переменные окружения:
-   ```bash
-   export TELEGRAM_BOT_TOKEN="<токен_бота>"
-   export OWNER_CHAT_ID="<ваш_chat_id>"
+2. Узнайте свой `chat_id` (можно через @userinfobot или любой другой способ).
+3. В файле `bot.py` заполните реальные значения в объекте `config`:
+   ```python
+   config = BotConfig(token="<токен_бота>", owner_chat_id=<ваш_chat_id>)
    ```
 4. Установите зависимости:
    ```bash
