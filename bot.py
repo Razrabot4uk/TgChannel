@@ -56,9 +56,16 @@ def get_effective_text(message: Message) -> Optional[str]:
     return message.text or message.caption
 
 
-def record_forward(mapping: Dict[int, int], sent_message: Optional[Message], source: Message) -> None:
-    if sent_message and source.from_user:
-        mapping[sent_message.message_id] = source.from_user.id
+def record_forward(
+    mapping: Dict[int, int], header: Optional[Message], forwarded: Optional[Message], source: Message
+) -> None:
+    if not source.from_user:
+        return
+
+    if header:
+        mapping[header.message_id] = source.from_user.id
+    if forwarded:
+        mapping[forwarded.message_id] = source.from_user.id
 
 
 async def forward_message_to_owner(update: Update, context: CallbackContext) -> None:
@@ -74,24 +81,25 @@ async def forward_message_to_owner(update: Update, context: CallbackContext) -> 
     if get_effective_text(message):
         header_text = f"{header_text}: {html.escape(get_effective_text(message) or '')}"
 
-    sent_message: Optional[Message] = None
+    header_message: Optional[Message] = None
+    forwarded_message: Optional[Message] = None
     try:
-        await context.bot.send_message(
+        header_message = await context.bot.send_message(
             chat_id=config.owner_chat_id, text=header_text, parse_mode=ParseMode.HTML
         )
-        sent_message = await context.bot.copy_message(
+        forwarded_message = await context.bot.copy_message(
             chat_id=config.owner_chat_id,
             from_chat_id=message.chat_id,
             message_id=message.message_id,
         )
     except Exception:
-        sent_message = await context.bot.send_message(
+        header_message = await context.bot.send_message(
             chat_id=config.owner_chat_id,
             text=header_text,
             parse_mode=ParseMode.HTML,
         )
 
-    record_forward(mapping, sent_message, message)
+    record_forward(mapping, header_message, forwarded_message, message)
 
 
 async def forward_reply_to_user(update: Update, context: CallbackContext) -> None:
@@ -121,17 +129,22 @@ async def forward_reply_to_user(update: Update, context: CallbackContext) -> Non
         )
 
 
+async def log_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logger.exception("Unhandled exception while processing update %s", update, exc_info=context.error)
+
+
 def main() -> None:
     config.validate()
 
     application = Application.builder().token(config.token).build()
 
-    user_filters = (~filters.Chat(config.owner_chat_id)) & ~filters.COMMAND & ~filters.StatusUpdate.ALL
+    user_filters = ~filters.Chat(config.owner_chat_id)
 
     application.add_handler(MessageHandler(user_filters, forward_message_to_owner))
     application.add_handler(
         MessageHandler(filters.Chat(config.owner_chat_id) & filters.REPLY, forward_reply_to_user)
     )
+    application.add_error_handler(log_error)
 
     logger.info("Starting bot for owner chat %s", config.owner_chat_id)
     application.run_polling()
