@@ -34,7 +34,7 @@ FORWARDED_MESSAGE_MAP_KEY = "forwarded_message_map"
 
 def ensure_map(context: ContextTypes.DEFAULT_TYPE) -> Dict[int, int]:
     """Return the shared mapping that links owner's chat messages to user ids."""
-    data = context.application_data.setdefault(FORWARDED_MESSAGE_MAP_KEY, {})
+    data = context.bot_data.setdefault(FORWARDED_MESSAGE_MAP_KEY, {})
     return data  # type: ignore[return-value]
 
 
