@@ -70,39 +70,24 @@ async def forward_message_to_owner(update: Update, context: CallbackContext) -> 
     user_link = build_user_link(message)
     mapping = ensure_map(context)
 
+    header_text = f"Сообщение от {user_link}"
+    if get_effective_text(message):
+        header_text = f"{header_text}: {html.escape(get_effective_text(message) or '')}"
+
     sent_message: Optional[Message] = None
-    if message.text:
+    try:
+        await context.bot.send_message(
+            chat_id=config.owner_chat_id, text=header_text, parse_mode=ParseMode.HTML
+        )
+        sent_message = await context.bot.copy_message(
+            chat_id=config.owner_chat_id,
+            from_chat_id=message.chat_id,
+            message_id=message.message_id,
+        )
+    except Exception:
         sent_message = await context.bot.send_message(
             chat_id=config.owner_chat_id,
-            text=f"Новое сообщение от {user_link}: {html.escape(message.text)}",
-            parse_mode=ParseMode.HTML,
-        )
-    elif message.photo:
-        sent_message = await context.bot.send_photo(
-            chat_id=config.owner_chat_id,
-            photo=message.photo[-1].file_id,
-            caption=f"Новое фото от {user_link}",
-            parse_mode=ParseMode.HTML,
-        )
-    elif message.video:
-        sent_message = await context.bot.send_video(
-            chat_id=config.owner_chat_id,
-            video=message.video.file_id,
-            caption=f"Новое видео от {user_link}",
-            parse_mode=ParseMode.HTML,
-        )
-    elif message.voice:
-        sent_message = await context.bot.send_voice(
-            chat_id=config.owner_chat_id,
-            voice=message.voice.file_id,
-            caption=f"Новое голосовое сообщение от {user_link}",
-            parse_mode=ParseMode.HTML,
-        )
-    elif message.document:
-        sent_message = await context.bot.send_document(
-            chat_id=config.owner_chat_id,
-            document=message.document.file_id,
-            caption=f"Документ от {user_link}",
+            text=header_text,
             parse_mode=ParseMode.HTML,
         )
 
@@ -122,38 +107,16 @@ async def forward_reply_to_user(update: Update, context: CallbackContext) -> Non
         logger.info("No stored user id for replied message %s", message.reply_to_message.message_id)
         return
 
-    if message.text:
+    try:
+        await context.bot.copy_message(
+            chat_id=target_user_id,
+            from_chat_id=config.owner_chat_id,
+            message_id=message.message_id,
+        )
+    except Exception:
         await context.bot.send_message(
             chat_id=target_user_id,
-            text=message.text,
-            parse_mode=ParseMode.HTML,
-        )
-    elif message.photo:
-        await context.bot.send_photo(
-            chat_id=target_user_id,
-            photo=message.photo[-1].file_id,
-            caption=get_effective_text(message),
-            parse_mode=ParseMode.HTML,
-        )
-    elif message.video:
-        await context.bot.send_video(
-            chat_id=target_user_id,
-            video=message.video.file_id,
-            caption=get_effective_text(message),
-            parse_mode=ParseMode.HTML,
-        )
-    elif message.voice:
-        await context.bot.send_voice(
-            chat_id=target_user_id,
-            voice=message.voice.file_id,
-            caption=get_effective_text(message),
-            parse_mode=ParseMode.HTML,
-        )
-    elif message.document:
-        await context.bot.send_document(
-            chat_id=target_user_id,
-            document=message.document.file_id,
-            caption=get_effective_text(message),
+            text=get_effective_text(message) or "Сообщение от владельца",
             parse_mode=ParseMode.HTML,
         )
 
@@ -163,11 +126,9 @@ def main() -> None:
 
     application = Application.builder().token(config.token).build()
 
-    user_filters = (~filters.Chat(config.owner_chat_id)) & (
-        filters.TEXT | filters.PHOTO | filters.VIDEO | filters.VOICE | filters.Document.ALL
-    )
+    user_filters = (~filters.Chat(config.owner_chat_id)) & ~filters.COMMAND & ~filters.StatusUpdate.ALL
 
-    application.add_handler(MessageHandler(user_filters & ~filters.COMMAND, forward_message_to_owner))
+    application.add_handler(MessageHandler(user_filters, forward_message_to_owner))
     application.add_handler(
         MessageHandler(filters.Chat(config.owner_chat_id) & filters.REPLY, forward_reply_to_user)
     )
